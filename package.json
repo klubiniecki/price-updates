@@ -1,7 +1,7 @@
 {
-  "name": "crypto-price-emailer",
+  "name": "crypto-price-telegram-bot",
   "version": "1.0.0",
-  "description": "Daily crypto price email scheduler",
+  "description": "Daily crypto price Telegram bot scheduler",
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc",
@@ -10,17 +10,15 @@
     "postinstall": "npm run build",
     "test": "echo \"No tests specified\" && exit 0"
   },
-  "keywords": ["crypto", "email", "scheduler", "typescript"],
-  "author": "krisl",
+  "keywords": ["crypto", "telegram", "bot", "scheduler", "typescript"],
+  "author": "Your Name",
   "license": "MIT",
   "dependencies": {
-    "node-cron": "^3.0.2",
-    "nodemailer": "^6.9.7"
+    "node-cron": "^3.0.2"
   },
   "devDependencies": {
     "@types/node": "^20.8.0",
     "@types/node-cron": "^3.0.8",
-    "@types/nodemailer": "^6.4.13",
     "ts-node": "^10.9.1",
     "typescript": "^5.2.2"
   },
