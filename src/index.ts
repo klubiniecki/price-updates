@@ -198,7 +198,7 @@ async function sendTestMessage(): Promise<void> {
 
 // Schedule the job to run at 11:00 AM Brisbane time every day
 // Using Brisbane timezone to handle DST automatically
-const cronExpression = '0 11 * * *'; // 11:00 AM Brisbane time
+const cronExpression = '* * * * *'; // 11:00 AM Brisbane time
 
 console.log('Starting crypto price Telegram bot...');
 console.log(`Scheduled to run daily at 11:00 AM Brisbane time`);
