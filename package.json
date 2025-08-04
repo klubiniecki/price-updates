@@ -1,7 +1,7 @@
 {
-  "name": "crypto-price-telegram-bot",
+  "name": "crypto-price-dashboard",
   "version": "1.0.0",
-  "description": "Daily crypto price Telegram bot scheduler",
+  "description": "Live crypto price dashboard for COOKIE, BTC, and KAITO",
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc",
@@ -10,15 +10,12 @@
     "postinstall": "npm run build",
     "test": "echo \"No tests specified\" && exit 0"
   },
-  "keywords": ["crypto", "telegram", "bot", "scheduler", "typescript"],
+  "keywords": ["crypto", "dashboard", "prices", "typescript", "web"],
   "author": "Your Name",
   "license": "MIT",
-  "dependencies": {
-    "node-cron": "^3.0.2"
-  },
+  "dependencies": {},
   "devDependencies": {
     "@types/node": "^20.8.0",
-    "@types/node-cron": "^3.0.8",
     "ts-node": "^10.9.1",
     "typescript": "^5.2.2"
   },

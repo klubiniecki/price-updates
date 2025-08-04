@@ -1,21 +1,7 @@
-import cron from 'node-cron';
 import { createServer } from 'http';
+import { URL } from 'url';
 
-// Environment variables (set these in your hosting platform)
-const BOT_TOKEN = process.env.BOT_TOKEN || '';
-const CHAT_ID = process.env.CHAT_ID || '';
 const PORT = process.env.PORT || 3000;
-
-// Debug environment variables on startup
-console.log('=== Environment Variables Debug ===');
-console.log('NODE_ENV:', process.env.NODE_ENV);
-console.log('BOT_TOKEN exists:', !!process.env.BOT_TOKEN);
-console.log('BOT_TOKEN length:', process.env.BOT_TOKEN?.length || 0);
-console.log('CHAT_ID exists:', !!process.env.CHAT_ID);
-console.log('CHAT_ID value:', process.env.CHAT_ID || 'NOT SET');
-console.log('PORT:', process.env.PORT);
-console.log('All env vars:', Object.keys(process.env).filter(key => key.includes('BOT') || key.includes('CHAT')));
-console.log('===================================');
 
 interface CryptoPrice {
   id: string;
@@ -25,26 +11,18 @@ interface CryptoPrice {
   price_change_percentage_24h: number;
 }
 
-interface TelegramResponse {
-  ok: boolean;
-  result?: {
-    message_id: number;
-    [key: string]: any;
-  };
-  error_code?: number;
-  description?: string;
-}
-
 interface CoinGeckoResponse {
   [key: string]: {
     usd: number;
     usd_24h_change: number;
   };
 }
+
+// Crypto token mappings (CoinGecko IDs)
 const CRYPTO_TOKENS = {
-  'COOKIE': 'cookie-dao', // Cookie DAO token
+  'COOKIE': 'cookie',
   'BTC': 'bitcoin',
-  'KAITO': 'kaito-ai' // Kaito AI token
+  'KAITO': 'kaito'
 };
 
 async function getCryptoPrices(): Promise<CryptoPrice[]> {
@@ -52,7 +30,7 @@ async function getCryptoPrices(): Promise<CryptoPrice[]> {
     const tokenIds = Object.values(CRYPTO_TOKENS).join(',');
     const url = `https://api.coingecko.com/api/v3/simple/price?ids=${tokenIds}&vs_currencies=usd&include_24hr_change=true`;
     
-    console.log('Fetching from URL:', url);
+    console.log('Fetching crypto prices...');
     
     const response = await fetch(url);
     if (!response.ok) {
@@ -60,7 +38,6 @@ async function getCryptoPrices(): Promise<CryptoPrice[]> {
     }
     
     const data: CoinGeckoResponse = await response.json() as CoinGeckoResponse;
-    console.log('API Response:', JSON.stringify(data, null, 2));
     
     const prices: CryptoPrice[] = [];
     
@@ -74,12 +51,10 @@ async function getCryptoPrices(): Promise<CryptoPrice[]> {
           current_price: priceData.usd,
           price_change_percentage_24h: priceData.usd_24h_change || 0
         });
-        console.log(`✅ Found price for ${symbol}: ${priceData.usd}`);
-      } else {
-        console.log(`❌ No price data found for ${symbol} (${coinGeckoId})`);
       }
     }
     
+    console.log(`Fetched ${prices.length} crypto prices successfully`);
     return prices;
   } catch (error) {
     console.error('Error fetching crypto prices:', error);
@@ -87,197 +62,316 @@ async function getCryptoPrices(): Promise<CryptoPrice[]> {
   }
 }
 
-function formatTelegramMessage(prices: CryptoPrice[]): string {
-  const date = new Date().toLocaleString('en-AU', {
+function generateHTML(prices: CryptoPrice[], error?: string): string {
+  const now = new Date().toLocaleString('en-AU', {
     timeZone: 'Australia/Brisbane',
     dateStyle: 'full',
-    timeStyle: 'short'
+    timeStyle: 'medium'
   });
 
-  let message = `🚀 *Daily Crypto Price Report*\n`;
-  message += `📅 ${date}\n\n`;
+  const priceCards = prices.map(token => {
+    const changeClass = token.price_change_percentage_24h >= 0 ? 'positive' : 'negative';
+    const changeSymbol = token.price_change_percentage_24h >= 0 ? '▲' : '▼';
+    const changeColor = token.price_change_percentage_24h >= 0 ? '#10b981' : '#ef4444';
+    
+    return `
+      <div class="price-card">
+        <div class="token-symbol">${token.symbol}</div>
+        <div class="token-price">$${token.current_price.toLocaleString('en-US', {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 8
+        })}</div>
+        <div class="token-change" style="color: ${changeColor}">
+          ${changeSymbol} ${token.price_change_percentage_24h.toFixed(2)}% (24h)
+        </div>
+      </div>
+    `;
+  }).join('');
 
-  prices.forEach(token => {
-    const changeEmoji = token.price_change_percentage_24h >= 0 ? '📈' : '📉';
-    const changeSymbol = token.price_change_percentage_24h >= 0 ? '+' : '';
-    const price = token.current_price.toLocaleString('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 8
-    });
-    
-    message += `*${token.symbol}*\n`;
-    message += `💰 ${price}\n`;
-    message += `${changeEmoji} ${changeSymbol}${token.price_change_percentage_24h.toFixed(2)}% (24h)\n\n`;
-  });
-
-  message += `📊 _Data provided by CoinGecko API_\n`;
-  message += `⏰ _Sent daily at 11:00 AM Brisbane time_`;
-
-  return message;
-}
-
-async function sendTelegramMessage(message: string): Promise<void> {
-  try {
-    console.log('Sending Telegram message...');
-    console.log('Bot token:', BOT_TOKEN ? 'Set' : 'Not set');
-    console.log('Chat ID:', CHAT_ID ? 'Set' : 'Not set');
-    
-    const url = `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`;
-    
-    const payload = {
-      chat_id: CHAT_ID,
-      text: message,
-      parse_mode: 'Markdown',
-      disable_web_page_preview: true
-    };
-
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(payload)
-    });
-
-    if (!response.ok) {
-      const errorData: TelegramResponse = await response.json() as TelegramResponse;
-      throw new Error(`Telegram API error: ${JSON.stringify(errorData)}`);
-    }
-
-    const result: TelegramResponse = await response.json() as TelegramResponse;
-    console.log('Telegram message sent successfully:', result.result?.message_id);
-    
-  } catch (error) {
-    console.error('Error sending Telegram message:', error);
-    throw error;
-  }
-}
-
-async function sendCryptoPriceUpdate(): Promise<void> {
-  try {
-    console.log('Starting crypto price update...');
-    
-    console.log('Fetching crypto prices...');
-    const prices = await getCryptoPrices();
-    
-    if (prices.length === 0) {
-      throw new Error('No price data retrieved');
-    }
-
-    console.log('Crypto prices fetched successfully:', prices.length, 'tokens');
-    
-    const message = formatTelegramMessage(prices);
-    
-    await sendTelegramMessage(message);
-    
-  } catch (error) {
-    console.error('Error in crypto price update:', error);
-    
-    // Send error message to Telegram if possible
-    if (BOT_TOKEN && CHAT_ID) {
-      try {
-        const errorMessage = `❌ *Crypto Price Update Failed*\n\n` +
-          `Error: ${error instanceof Error ? error.message : 'Unknown error'}\n\n` +
-          `Time: ${new Date().toLocaleString('en-AU', { timeZone: 'Australia/Brisbane' })}`;
+  return `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🚀 Crypto Price Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
         
-        await sendTelegramMessage(errorMessage);
-      } catch (telegramError) {
-        console.error('Failed to send error message to Telegram:', telegramError);
-      }
-    }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+            color: #333;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+            color: white;
+        }
+        
+        .header h1 {
+            font-size: 3rem;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        
+        .header .subtitle {
+            font-size: 1.2rem;
+            opacity: 0.9;
+            margin-bottom: 20px;
+        }
+        
+        .last-updated {
+            background: rgba(255,255,255,0.2);
+            padding: 10px 20px;
+            border-radius: 25px;
+            display: inline-block;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.3);
+        }
+        
+        .price-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 30px;
+            margin-bottom: 40px;
+        }
+        
+        .price-card {
+            background: rgba(255,255,255,0.95);
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.2);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            text-align: center;
+        }
+        
+        .price-card:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 30px 60px rgba(0,0,0,0.2);
+        }
+        
+        .token-symbol {
+            font-size: 2rem;
+            font-weight: bold;
+            margin-bottom: 15px;
+            color: #4f46e5;
+        }
+        
+        .token-price {
+            font-size: 2.5rem;
+            font-weight: bold;
+            margin-bottom: 15px;
+            color: #1f2937;
+        }
+        
+        .token-change {
+            font-size: 1.2rem;
+            font-weight: 600;
+        }
+        
+        .controls {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        .refresh-btn {
+            background: linear-gradient(45deg, #10b981, #059669);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            font-size: 1.1rem;
+            border-radius: 25px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3);
+        }
+        
+        .refresh-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(16, 185, 129, 0.4);
+        }
+        
+        .auto-refresh {
+            margin-top: 15px;
+            color: white;
+            opacity: 0.8;
+        }
+        
+        .error {
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            color: #dc2626;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        
+        .footer {
+            text-align: center;
+            color: white;
+            opacity: 0.7;
+            margin-top: 40px;
+        }
+        
+        @media (max-width: 768px) {
+            .header h1 {
+                font-size: 2rem;
+            }
+            
+            .price-grid {
+                grid-template-columns: 1fr;
+                gap: 20px;
+            }
+            
+            .token-price {
+                font-size: 2rem;
+            }
+        }
+        
+        .loading {
+            text-align: center;
+            color: white;
+            font-size: 1.2rem;
+            margin: 20px 0;
+        }
+        
+        .spinner {
+            border: 4px solid rgba(255,255,255,0.3);
+            border-radius: 50%;
+            border-top: 4px solid white;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🚀 Crypto Price Dashboard</h1>
+            <div class="subtitle">Live prices for COOKIE, BTC & KAITO</div>
+            <div class="last-updated">
+                📅 Last updated: ${now}
+            </div>
+        </div>
+        
+        ${error ? `<div class="error">❌ Error: ${error}</div>` : ''}
+        
+        <div class="controls">
+            <button class="refresh-btn" onclick="refreshPrices()">
+                🔄 Refresh Prices
+            </button>
+            <div class="auto-refresh">
+                🔄 Auto-refreshes every 5 minutes
+            </div>
+        </div>
+        
+        <div class="price-grid">
+            ${priceCards || '<div class="loading"><div class="spinner"></div>Loading prices...</div>'}
+        </div>
+        
+        <div class="footer">
+            <p>📊 Data provided by CoinGecko API</p>
+            <p>🌏 Times shown in Brisbane timezone</p>
+        </div>
+    </div>
+    
+    <script>
+        // Auto-refresh every 5 minutes
+        setInterval(() => {
+            location.reload();
+        }, 5 * 60 * 1000);
+        
+        function refreshPrices() {
+            location.reload();
+        }
+        
+        // Add some loading animation when refreshing
+        function showLoading() {
+            document.querySelector('.price-grid').innerHTML = 
+                '<div class="loading"><div class="spinner"></div>Refreshing prices...</div>';
+        }
+    </script>
+</body>
+</html>
+  `;
+}
+
+// Create HTTP server
+const server = createServer(async (req, res) => {
+  const url = new URL(req.url || '/', `http://${req.headers.host}`);
+  
+  // Set CORS headers
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  
+  if (req.method === 'OPTIONS') {
+    res.writeHead(200);
+    res.end();
+    return;
   }
-}
-
-// Test function to send message immediately
-async function sendTestMessage(): Promise<void> {
-  console.log('Sending test message...');
-  await sendCryptoPriceUpdate();
-}
-
-// Schedule the job to run at 11:00 AM Brisbane time every day
-// Using Brisbane timezone to handle DST automatically
-const cronExpression = '* * * * *'; // 11:00 AM Brisbane time
-
-console.log('Starting crypto price Telegram bot...');
-console.log(`Scheduled to run daily at 11:00 AM Brisbane time`);
-
-// Schedule the cron job
-cron.schedule(cronExpression, () => {
-  console.log('Running scheduled crypto price update...');
-  sendCryptoPriceUpdate();
-}, {
-  scheduled: true,
-  timezone: 'Australia/Brisbane' // This handles DST automatically
-});
-
-// Optional: Send a test message immediately when the app starts
-// Uncomment the next line for testing
-// sendTestMessage();
-
-// Keep the application running
-console.log('Crypto price bot is running...');
-console.log('Press Ctrl+C to stop the application');
-
-// Create a simple HTTP server to keep Railway happy
-const server = createServer((req, res) => {
-  if (req.url === '/health') {
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ 
-      status: 'healthy', 
-      uptime: process.uptime(),
-      nextSchedule: '11:00 AM Brisbane time daily',
-      botConfigured: !!BOT_TOKEN && !!CHAT_ID
-    }));
-  } else if (req.url === '/test') {
-    res.writeHead(200, { 'Content-Type': 'text/plain' });
-    res.end('Triggering test message...');
-    sendTestMessage().catch(console.error);
+  
+  if (url.pathname === '/api/prices') {
+    // API endpoint for prices
+    try {
+      const prices = await getCryptoPrices();
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        success: true,
+        data: prices,
+        timestamp: new Date().toISOString()
+      }));
+    } catch (error) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      }));
+    }
   } else {
-    res.writeHead(200, { 'Content-Type': 'text/html' });
-    res.end(`
-      <html>
-        <head><title>Crypto Price Telegram Bot</title></head>
-        <body>
-          <h1>🚀 Crypto Price Telegram Bot</h1>
-          <p>Bot is running and scheduled to send daily updates at 11:00 AM Brisbane time.</p>
-          <p>Status: ${BOT_TOKEN && CHAT_ID ? '✅ Configured' : '❌ Missing configuration'}</p>
-          <p>Uptime: ${Math.floor(process.uptime())} seconds</p>
-          <hr>
-          <h3>Configuration Debug:</h3>
-          <ul>
-            <li>BOT_TOKEN: ${BOT_TOKEN ? '✅ Set (' + BOT_TOKEN.length + ' chars)' : '❌ Not set'}</li>
-            <li>CHAT_ID: ${CHAT_ID ? '✅ Set (' + CHAT_ID + ')' : '❌ Not set'}</li>
-            <li>NODE_ENV: ${process.env.NODE_ENV || 'not set'}</li>
-          </ul>
-          <hr>
-          <p><a href="/health">Health Check</a> | <a href="/test">Send Test Message</a></p>
-        </body>
-      </html>
-    `);
+    // Main dashboard page
+    try {
+      const prices = await getCryptoPrices();
+      const html = generateHTML(prices);
+      res.writeHead(200, { 'Content-Type': 'text/html' });
+      res.end(html);
+    } catch (error) {
+      const html = generateHTML([], error instanceof Error ? error.message : 'Failed to fetch prices');
+      res.writeHead(200, { 'Content-Type': 'text/html' });
+      res.end(html);
+    }
   }
 });
 
 server.listen(PORT, () => {
-  console.log(`HTTP server running on port ${PORT}`);
-  console.log(`Health check: http://localhost:${PORT}/health`);
-  console.log(`Test message: http://localhost:${PORT}/test`);
+  console.log(`🚀 Crypto Price Dashboard running on port ${PORT}`);
+  console.log(`📊 Dashboard: http://localhost:${PORT}`);
+  console.log(`🔌 API: http://localhost:${PORT}/api/prices`);
 });
 
-// Graceful shutdown
-process.on('SIGINT', () => {
-  console.log('\nShutting down gracefully...');
-  server.close(() => {
-    process.exit(0);
-  });
-});
+console.log('Starting Crypto Price Dashboard...');
 
-process.on('SIGTERM', () => {
-  console.log('\nReceived SIGTERM, shutting down gracefully...');
-  server.close(() => {
-    process.exit(0);
-  });
-});
-
-export { sendCryptoPriceUpdate, getCryptoPrices, sendTestMessage };
+export { getCryptoPrices };
