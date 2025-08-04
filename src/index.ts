@@ -12,14 +12,22 @@ interface CryptoPrice {
   price_change_percentage_24h: number;
 }
 
+interface TelegramResponse {
+  ok: boolean;
+  result?: {
+    message_id: number;
+    [key: string]: any;
+  };
+  error_code?: number;
+  description?: string;
+}
+
 interface CoinGeckoResponse {
   [key: string]: {
     usd: number;
     usd_24h_change: number;
   };
 }
-
-// Crypto token mappings (CoinGecko IDs)
 const CRYPTO_TOKENS = {
   'COOKIE': 'cookie-dao', // Cookie DAO token
   'BTC': 'bitcoin',
@@ -115,11 +123,11 @@ async function sendTelegramMessage(message: string): Promise<void> {
     });
 
     if (!response.ok) {
-      const errorData = await response.json();
+      const errorData: TelegramResponse = await response.json() as TelegramResponse;
       throw new Error(`Telegram API error: ${JSON.stringify(errorData)}`);
     }
 
-    const result = await response.json();
+    const result: TelegramResponse = await response.json() as TelegramResponse;
     console.log('Telegram message sent successfully:', result.result?.message_id);
     
   } catch (error) {
