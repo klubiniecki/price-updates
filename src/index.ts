@@ -92,13 +92,6 @@ function generateHTML(prices: CryptoPrice[], usdToAud: number, error?: string): 
     timeStyle: 'medium'
   });
 
-function generateHTML(prices: CryptoPrice[], usdToAud: number, error?: string): string {
-  const now = new Date().toLocaleString('en-AU', {
-    timeZone: 'Australia/Brisbane',
-    dateStyle: 'full',
-    timeStyle: 'medium'
-  });
-
   // Calculate portfolio value for COOKIE tokens
   const cookiePrice = prices.find(p => p.symbol === 'COOKIE');
   const portfolioValueUSD = cookiePrice ? cookiePrice.current_price * COOKIE_HOLDINGS : 0;
