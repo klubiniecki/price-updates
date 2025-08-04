@@ -6,6 +6,17 @@ const BOT_TOKEN = process.env.BOT_TOKEN || '';
 const CHAT_ID = process.env.CHAT_ID || '';
 const PORT = process.env.PORT || 3000;
 
+// Debug environment variables on startup
+console.log('=== Environment Variables Debug ===');
+console.log('NODE_ENV:', process.env.NODE_ENV);
+console.log('BOT_TOKEN exists:', !!process.env.BOT_TOKEN);
+console.log('BOT_TOKEN length:', process.env.BOT_TOKEN?.length || 0);
+console.log('CHAT_ID exists:', !!process.env.CHAT_ID);
+console.log('CHAT_ID value:', process.env.CHAT_ID || 'NOT SET');
+console.log('PORT:', process.env.PORT);
+console.log('All env vars:', Object.keys(process.env).filter(key => key.includes('BOT') || key.includes('CHAT')));
+console.log('===================================');
+
 interface CryptoPrice {
   id: string;
   symbol: string;
@@ -41,12 +52,15 @@ async function getCryptoPrices(): Promise<CryptoPrice[]> {
     const tokenIds = Object.values(CRYPTO_TOKENS).join(',');
     const url = `https://api.coingecko.com/api/v3/simple/price?ids=${tokenIds}&vs_currencies=usd&include_24hr_change=true`;
     
+    console.log('Fetching from URL:', url);
+    
     const response = await fetch(url);
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
     
     const data: CoinGeckoResponse = await response.json() as CoinGeckoResponse;
+    console.log('API Response:', JSON.stringify(data, null, 2));
     
     const prices: CryptoPrice[] = [];
     
@@ -60,6 +74,9 @@ async function getCryptoPrices(): Promise<CryptoPrice[]> {
           current_price: priceData.usd,
           price_change_percentage_24h: priceData.usd_24h_change || 0
         });
+        console.log(`✅ Found price for ${symbol}: ${priceData.usd}`);
+      } else {
+        console.log(`❌ No price data found for ${symbol} (${coinGeckoId})`);
       }
     }
     
@@ -227,6 +244,13 @@ const server = createServer((req, res) => {
           <p>Bot is running and scheduled to send daily updates at 11:00 AM Brisbane time.</p>
           <p>Status: ${BOT_TOKEN && CHAT_ID ? '✅ Configured' : '❌ Missing configuration'}</p>
           <p>Uptime: ${Math.floor(process.uptime())} seconds</p>
+          <hr>
+          <h3>Configuration Debug:</h3>
+          <ul>
+            <li>BOT_TOKEN: ${BOT_TOKEN ? '✅ Set (' + BOT_TOKEN.length + ' chars)' : '❌ Not set'}</li>
+            <li>CHAT_ID: ${CHAT_ID ? '✅ Set (' + CHAT_ID + ')' : '❌ Not set'}</li>
+            <li>NODE_ENV: ${process.env.NODE_ENV || 'not set'}</li>
+          </ul>
           <hr>
           <p><a href="/health">Health Check</a> | <a href="/test">Send Test Message</a></p>
         </body>
