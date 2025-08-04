@@ -2,6 +2,7 @@ import { createServer } from 'http';
 import { URL } from 'url';
 
 const PORT = process.env.PORT || 3000;
+const COOKIE_HOLDINGS = 190000; // Your COOKIE token holdings
 
 interface CryptoPrice {
   id: string;
@@ -15,6 +16,13 @@ interface CoinGeckoResponse {
   [key: string]: {
     usd: number;
     usd_24h_change: number;
+    aud?: number;
+  };
+}
+
+interface ExchangeRateResponse {
+  rates: {
+    AUD: number;
   };
 }
 
@@ -25,7 +33,22 @@ const CRYPTO_TOKENS = {
   'KAITO': 'kaito'
 };
 
-async function getCryptoPrices(): Promise<CryptoPrice[]> {
+async function getExchangeRate(): Promise<number> {
+  try {
+    // Using a free exchange rate API
+    const response = await fetch('https://api.exchangerate-api.com/v4/latest/USD');
+    if (!response.ok) {
+      throw new Error(`Exchange rate API error: ${response.status}`);
+    }
+    const data: ExchangeRateResponse = await response.json() as ExchangeRateResponse;
+    return data.rates.AUD;
+  } catch (error) {
+    console.error('Error fetching exchange rate, using fallback:', error);
+    return 1.55; // Fallback AUD/USD rate
+  }
+}
+
+async function getCryptoPrices(): Promise<{ prices: CryptoPrice[], usdToAud: number }> {
   try {
     const tokenIds = Object.values(CRYPTO_TOKENS).join(',');
     const url = `https://api.coingecko.com/api/v3/simple/price?ids=${tokenIds}&vs_currencies=usd&include_24hr_change=true`;
@@ -62,12 +85,73 @@ async function getCryptoPrices(): Promise<CryptoPrice[]> {
   }
 }
 
-function generateHTML(prices: CryptoPrice[], error?: string): string {
+function generateHTML(prices: CryptoPrice[], usdToAud: number, error?: string): string {
   const now = new Date().toLocaleString('en-AU', {
     timeZone: 'Australia/Brisbane',
     dateStyle: 'full',
     timeStyle: 'medium'
   });
+
+function generateHTML(prices: CryptoPrice[], usdToAud: number, error?: string): string {
+  const now = new Date().toLocaleString('en-AU', {
+    timeZone: 'Australia/Brisbane',
+    dateStyle: 'full',
+    timeStyle: 'medium'
+  });
+
+  // Calculate portfolio value for COOKIE tokens
+  const cookiePrice = prices.find(p => p.symbol === 'COOKIE');
+  const portfolioValueUSD = cookiePrice ? cookiePrice.current_price * COOKIE_HOLDINGS : 0;
+  const portfolioValueAUD = portfolioValueUSD * usdToAud;
+  const portfolioChange24h = cookiePrice ? cookiePrice.price_change_percentage_24h : 0;
+  const portfolioChangeUSD = portfolioValueUSD * (portfolioChange24h / 100);
+  const portfolioChangeAUD = portfolioChangeUSD * usdToAud;
+
+  const portfolioCard = cookiePrice ? `
+    <div class="portfolio-section">
+      <h2 class="portfolio-title">💰 Your COOKIE Portfolio</h2>
+      <div class="portfolio-card">
+        <div class="portfolio-holdings">
+          <span class="holdings-label">Holdings:</span>
+          <span class="holdings-amount">${COOKIE_HOLDINGS.toLocaleString()} COOKIE</span>
+        </div>
+        
+        <div class="portfolio-values">
+          <div class="portfolio-value">
+            <div class="currency-label">USD Value</div>
+            <div class="value-amount usd">${portfolioValueUSD.toLocaleString('en-US', {
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2
+            })}</div>
+            <div class="value-change ${portfolioChange24h >= 0 ? 'positive' : 'negative'}">
+              ${portfolioChange24h >= 0 ? '+' : ''}${Math.abs(portfolioChangeUSD).toLocaleString('en-US', {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+              })} (24h)
+            </div>
+          </div>
+          
+          <div class="portfolio-value">
+            <div class="currency-label">AUD Value</div>
+            <div class="value-amount aud">${portfolioValueAUD.toLocaleString('en-AU', {
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2
+            })} AUD</div>
+            <div class="value-change ${portfolioChange24h >= 0 ? 'positive' : 'negative'}">
+              ${portfolioChange24h >= 0 ? '+' : ''}${Math.abs(portfolioChangeAUD).toLocaleString('en-AU', {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+              })} AUD (24h)
+            </div>
+          </div>
+        </div>
+        
+        <div class="exchange-rate">
+          Exchange Rate: 1 USD = ${usdToAud.toFixed(4)} AUD
+        </div>
+      </div>
+    </div>
+  ` : '';
 
   const priceCards = prices.map(token => {
     const changeClass = token.price_change_percentage_24h >= 0 ? 'positive' : 'negative';
@@ -77,7 +161,7 @@ function generateHTML(prices: CryptoPrice[], error?: string): string {
     return `
       <div class="price-card">
         <div class="token-symbol">${token.symbol}</div>
-        <div class="token-price">$${token.current_price.toLocaleString('en-US', {
+        <div class="token-price">${token.current_price.toLocaleString('en-US', {
           minimumFractionDigits: 2,
           maximumFractionDigits: 8
         })}</div>
@@ -229,6 +313,105 @@ function generateHTML(prices: CryptoPrice[], error?: string): string {
             margin-top: 40px;
         }
         
+        .portfolio-section {
+            margin-bottom: 50px;
+        }
+        
+        .portfolio-title {
+            text-align: center;
+            color: white;
+            font-size: 2.5rem;
+            margin-bottom: 30px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        
+        .portfolio-card {
+            background: linear-gradient(135deg, rgba(255,255,255,0.95), rgba(255,255,255,0.85));
+            border-radius: 25px;
+            padding: 40px;
+            box-shadow: 0 25px 50px rgba(0,0,0,0.15);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.2);
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        
+        .portfolio-holdings {
+            text-align: center;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 2px solid rgba(79, 70, 229, 0.2);
+        }
+        
+        .holdings-label {
+            font-size: 1.2rem;
+            color: #6b7280;
+            display: block;
+            margin-bottom: 10px;
+        }
+        
+        .holdings-amount {
+            font-size: 2rem;
+            font-weight: bold;
+            color: #4f46e5;
+        }
+        
+        .portfolio-values {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            margin-bottom: 25px;
+        }
+        
+        .portfolio-value {
+            text-align: center;
+            padding: 20px;
+            background: rgba(79, 70, 229, 0.05);
+            border-radius: 15px;
+            border: 1px solid rgba(79, 70, 229, 0.1);
+        }
+        
+        .currency-label {
+            font-size: 1rem;
+            color: #6b7280;
+            margin-bottom: 10px;
+            font-weight: 600;
+        }
+        
+        .value-amount {
+            font-size: 2.2rem;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+        
+        .value-amount.usd {
+            color: #059669;
+        }
+        
+        .value-amount.aud {
+            color: #dc2626;
+        }
+        
+        .value-change {
+            font-size: 1rem;
+            font-weight: 600;
+        }
+        
+        .positive {
+            color: #10b981;
+        }
+        
+        .negative {
+            color: #ef4444;
+        }
+        
+        .exchange-rate {
+            text-align: center;
+            color: #6b7280;
+            font-size: 0.9rem;
+            font-style: italic;
+        }
+        
         @media (max-width: 768px) {
             .header h1 {
                 font-size: 2rem;
@@ -241,6 +424,19 @@ function generateHTML(prices: CryptoPrice[], error?: string): string {
             
             .token-price {
                 font-size: 2rem;
+            }
+            
+            .portfolio-title {
+                font-size: 2rem;
+            }
+            
+            .portfolio-values {
+                grid-template-columns: 1fr;
+                gap: 20px;
+            }
+            
+            .value-amount {
+                font-size: 1.8rem;
             }
         }
         
@@ -278,6 +474,8 @@ function generateHTML(prices: CryptoPrice[], error?: string): string {
         </div>
         
         ${error ? `<div class="error">❌ Error: ${error}</div>` : ''}
+        
+        ${portfolioCard}
         
         <div class="controls">
             <button class="refresh-btn" onclick="refreshPrices()">
@@ -337,11 +535,24 @@ const server = createServer(async (req, res) => {
   if (url.pathname === '/api/prices') {
     // API endpoint for prices
     try {
-      const prices = await getCryptoPrices();
+      const { prices, usdToAud } = await getCryptoPrices();
+      const cookiePrice = prices.find(p => p.symbol === 'COOKIE');
+      const portfolioValueUSD = cookiePrice ? cookiePrice.current_price * COOKIE_HOLDINGS : 0;
+      const portfolioValueAUD = portfolioValueUSD * usdToAud;
+      
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({
         success: true,
         data: prices,
+        portfolio: {
+          holdings: COOKIE_HOLDINGS,
+          valueUSD: portfolioValueUSD,
+          valueAUD: portfolioValueAUD,
+          change24h: cookiePrice?.price_change_percentage_24h || 0
+        },
+        exchangeRate: {
+          usdToAud: usdToAud
+        },
         timestamp: new Date().toISOString()
       }));
     } catch (error) {
@@ -354,12 +565,12 @@ const server = createServer(async (req, res) => {
   } else {
     // Main dashboard page
     try {
-      const prices = await getCryptoPrices();
-      const html = generateHTML(prices);
+      const { prices, usdToAud } = await getCryptoPrices();
+      const html = generateHTML(prices, usdToAud);
       res.writeHead(200, { 'Content-Type': 'text/html' });
       res.end(html);
     } catch (error) {
-      const html = generateHTML([], error instanceof Error ? error.message : 'Failed to fetch prices');
+      const html = generateHTML([], 1.55, error instanceof Error ? error.message : 'Failed to fetch prices');
       res.writeHead(200, { 'Content-Type': 'text/html' });
       res.end(html);
     }
