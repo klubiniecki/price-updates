@@ -189,7 +189,7 @@ cron.schedule(cronExpression, () => {
 
 // Optional: Send a test email immediately when the app starts
 // Uncomment the next line for testing
-// sendPriceEmail();
+sendPriceEmail();
 
 // Keep the application running
 console.log('Crypto price emailer is running...');
