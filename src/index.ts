@@ -1,6 +1,5 @@
 import nodemailer from 'nodemailer';
 import cron from 'node-cron';
-import fetch from 'node-fetch';
 
 // Environment variables (set these in your hosting platform)
 const EMAIL_USER = process.env.EMAIL_USER || 'your-gmail@gmail.com';
@@ -23,7 +22,7 @@ interface CoinGeckoResponse {
 }
 
 // Create email transporter using Gmail
-const transporter = nodemailer.createTransporter({
+const transporter = nodemailer.createTransport({
   service: 'gmail',
   auth: {
     user: EMAIL_USER,
@@ -48,7 +47,7 @@ async function getCryptoPrices(): Promise<CryptoPrice[]> {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
     
-    const data: CoinGeckoResponse = await response.json();
+    const data: CoinGeckoResponse = await response.json() as CoinGeckoResponse;
     
     const prices: CryptoPrice[] = [];
     
@@ -171,6 +170,7 @@ async function sendPriceEmail(): Promise<void> {
 
 // Schedule the job to run at 11:00 AM Brisbane time every day
 // Cron expression: minute hour day month dayOfWeek
+// Note: This runs in UTC, so we need to adjust for Brisbane time
 // Brisbane is UTC+10 (AEST) or UTC+11 (AEDT during daylight saving)
 // For simplicity, using UTC+10. You may want to handle DST separately.
 const cronExpression = '0 1 * * *'; // 1:00 AM UTC = 11:00 AM Brisbane (UTC+10)
