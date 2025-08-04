@@ -171,7 +171,6 @@ async function sendPriceEmail(): Promise<void> {
 
 // Schedule the job to run at 11:00 AM Brisbane time every day
 // Cron expression: minute hour day month dayOfWeek
-// Note: This runs in UTC, so we need to adjust for Brisbane time
 // Brisbane is UTC+10 (AEST) or UTC+11 (AEDT during daylight saving)
 // For simplicity, using UTC+10. You may want to handle DST separately.
 const cronExpression = '0 1 * * *'; // 1:00 AM UTC = 11:00 AM Brisbane (UTC+10)
