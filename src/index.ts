@@ -217,7 +217,7 @@ cron.schedule(cronExpression, () => {
 // sendTestMessage();
 
 // Keep the application running
-console.log('Crypto price Telegram bot is running...');
+console.log('Crypto price bot is running...');
 console.log('Press Ctrl+C to stop the application');
 
 // Create a simple HTTP server to keep Railway happy
