@@ -52,18 +52,18 @@ async function getCryptoPrices(): Promise<{ prices: CryptoPrice[], usdToAud: num
   try {
     const tokenIds = Object.values(CRYPTO_TOKENS).join(',');
     const url = `https://api.coingecko.com/api/v3/simple/price?ids=${tokenIds}&vs_currencies=usd&include_24hr_change=true`;
-    
+
     console.log('Fetching crypto prices...');
-    
+
     const response = await fetch(url);
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
-    
+
     const data: CoinGeckoResponse = await response.json() as CoinGeckoResponse;
-    
+
     const prices: CryptoPrice[] = [];
-    
+
     for (const [symbol, coinGeckoId] of Object.entries(CRYPTO_TOKENS)) {
       const priceData = data[coinGeckoId];
       if (priceData) {
@@ -76,9 +76,12 @@ async function getCryptoPrices(): Promise<{ prices: CryptoPrice[], usdToAud: num
         });
       }
     }
-    
+
     console.log(`Fetched ${prices.length} crypto prices successfully`);
-    return prices;
+
+    const usdToAud = await getExchangeRate();
+
+    return { prices, usdToAud };
   } catch (error) {
     console.error('Error fetching crypto prices:', error);
     throw error;
