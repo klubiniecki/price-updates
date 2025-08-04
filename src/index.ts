@@ -1,8 +1,10 @@
 import cron from 'node-cron';
+import { createServer } from 'http';
 
 // Environment variables (set these in your hosting platform)
 const BOT_TOKEN = process.env.BOT_TOKEN || '';
 const CHAT_ID = process.env.CHAT_ID || '';
+const PORT = process.env.PORT || 3000;
 
 interface CryptoPrice {
   id: string;
@@ -201,10 +203,57 @@ cron.schedule(cronExpression, () => {
 console.log('Crypto price Telegram bot is running...');
 console.log('Press Ctrl+C to stop the application');
 
+// Create a simple HTTP server to keep Railway happy
+const server = createServer((req, res) => {
+  if (req.url === '/health') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ 
+      status: 'healthy', 
+      uptime: process.uptime(),
+      nextSchedule: '11:00 AM Brisbane time daily',
+      botConfigured: !!BOT_TOKEN && !!CHAT_ID
+    }));
+  } else if (req.url === '/test') {
+    res.writeHead(200, { 'Content-Type': 'text/plain' });
+    res.end('Triggering test message...');
+    sendTestMessage().catch(console.error);
+  } else {
+    res.writeHead(200, { 'Content-Type': 'text/html' });
+    res.end(`
+      <html>
+        <head><title>Crypto Price Telegram Bot</title></head>
+        <body>
+          <h1>🚀 Crypto Price Telegram Bot</h1>
+          <p>Bot is running and scheduled to send daily updates at 11:00 AM Brisbane time.</p>
+          <p>Status: ${BOT_TOKEN && CHAT_ID ? '✅ Configured' : '❌ Missing configuration'}</p>
+          <p>Uptime: ${Math.floor(process.uptime())} seconds</p>
+          <hr>
+          <p><a href="/health">Health Check</a> | <a href="/test">Send Test Message</a></p>
+        </body>
+      </html>
+    `);
+  }
+});
+
+server.listen(PORT, () => {
+  console.log(`HTTP server running on port ${PORT}`);
+  console.log(`Health check: http://localhost:${PORT}/health`);
+  console.log(`Test message: http://localhost:${PORT}/test`);
+});
+
 // Graceful shutdown
 process.on('SIGINT', () => {
   console.log('\nShutting down gracefully...');
-  process.exit(0);
+  server.close(() => {
+    process.exit(0);
+  });
+});
+
+process.on('SIGTERM', () => {
+  console.log('\nReceived SIGTERM, shutting down gracefully...');
+  server.close(() => {
+    process.exit(0);
+  });
 });
 
 export { sendCryptoPriceUpdate, getCryptoPrices, sendTestMessage };
